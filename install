@@ -257,8 +257,8 @@ function InstallTengine()
     ./configure --prefix=/usr/local/tengine \
         --lock-path=/var/lock/nginx.lock \
         --pid-path=/var/run/nginx.pid \
-        --error-log-path=/tengine/logs/error.log \
-        --http-log-path=/tengine/logs/access.log \
+        --error-log-path=/usr/local/tengine/logs/error.log \
+        --http-log-path=/usr/local/tengine/logs/access.log \
         --user=www \
         --group=www \
         --with-pcre=$cur_dir/pcre-8.30 \
@@ -305,6 +305,8 @@ function InstallTengine()
     echo "ok" > /home/wwwroot/default/test.html
     chown -R www:www /home/wwwroot
     mkdir /usr/local/tengine/conf/vhost
+    mkdir /usr/local/tengine/logs
+    chown -R www:www /usr/local/tengine/logs
     rm -f /usr/local/tengine/conf/nginx.conf
     cp $cur_dir/etc/nginx.conf /usr/local/tengine/conf/
     cp $cur_dir/etc/default.conf /usr/local/tengine/conf/vhost
