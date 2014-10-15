@@ -150,6 +150,8 @@ function InstallPHP()
         wget -c http://cn2.php.net/distributions/php-5.6.1.tar.gz
     fi
     cd $cur_dir
+    groupadd www
+    useradd -s /sbin/nologin -g www www
     rm -rf php-5.6.1
     tar zxvf php-5.6.1.tar.gz
     cd php-5.6.1
@@ -251,8 +253,6 @@ function InstallTengine()
         echo "Error: tengine not found!!!download now......"
         git clone https://github.com/alibaba/tengine.git
     fi
-    groupadd www
-    useradd -s /sbin/nologin -g www www
     cd tengine
     ./configure --prefix=/usr/local/tengine \
         --lock-path=/var/lock/nginx.lock \
