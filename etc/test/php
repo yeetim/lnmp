@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin                                                                             
+PORT='9000'
+IPADDR='127.0.0.1'                      
+retval=`nmap --system-dns -sT -p ${PORT} ${IPADDR} | grep open`
+if [[ "${retval}X" = "X" ]]; then
+    killall -9 php-fpm >/dev/null 2>&1
+    /sbin/service php-fpm start
+fi

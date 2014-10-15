@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin                                                
+retval=`ping -c 3 www.demo.com | awk '/received/ {print $4}'`
+if [[ ${retval} -eq 0 ]]; then
+    exit 1
+fi                               
+retval=`curl -I -s "http://www.demo.com/test.html" | grep "200 OK"`
+if [[ "${retval}x" = "x" ]]; then
+    if [ -e /usr/local/nginx ]; then
+        /sbin/service nginx restart >/dev/null 2>&1
+    fi
+fi

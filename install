@@ -1,0 +1,359 @@
+#!/usr/bin/env bash
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+export PATH
+cur_dir=$(pwd)
+if [ $(id -u) != "0" ]; then
+    echo "Error: You must be root to run this script, please use root to install lnmp"
+    exit 1
+fi
+clear
+echo "========================================================================="
+echo "LNMP V1.0 for CentOS/RadHat Linux Server  Written by Licess"
+echo "========================================================================="
+echo "A tool to auto-compile & install Tengine+MySQL+PHP on Linux "
+echo "========================================================================="
+#init
+function Init()
+{
+    #get system Mem
+    cat /etc/issue
+    uname -a
+    MemTotal=`free -m | grep Mem | awk '{print  $2}'`
+    echo -e "\n Memory is: ${MemTotal} MB "
+    #set timezone
+    rm -rf /etc/localtime
+    ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    yum install -y ntp
+    ntpdate -u pool.ntp.org
+    date
+    #remove about modules
+    rpm -qa|grep httpd
+    rpm -e httpd
+    rpm -qa|grep mysql
+    rpm -e mysql
+    rpm -qa|grep php
+    rpm -e php
+    yum -y remove httpd*
+    yum -y remove php*
+    yum -y remove mysql-server mysql
+    yum -y remove php-mysql
+    yum -y install yum-fastestmirror
+    yum -y remove httpd
+    #Disable SeLinux
+    if [ -s /etc/selinux/config ]; then
+        sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+    fi
+    #install base packages
+    cp /etc/yum.conf /etc/yum.conf.lnmp
+    sed -i 's:exclude=.*:exclude=:g' /etc/yum.conf
+    for packages in patch make cmake gcc gcc-c++ gcc-g77 flex bison file libtool libtool-libs autoconf kernel-devel libjpeg libjpeg-devel libpng libpng-devel libpng10 libpng10-devel gd gd-devel freetype freetype-devel libxml2 libxml2-devel zlib zlib-devel glib2 glib2-devel bzip2 bzip2-devel libevent libevent-devel ncurses ncurses-devel curl curl-devel e2fsprogs e2fsprogs-devel krb5 krb5-devel libidn libidn-devel openssl openssl-devel vim-minimal nano fonts-chinese gettext gettext-devel ncurses-devel gmp-devel pspell-devel unzip libcap wget git zlib libxslt libiconv libmcrypt mhash mcrypt gmp libunwind gperftools zlib1g-dev libxslt-devel readline-devel;
+    do yum -y install $packages; done
+    mv -f /etc/yum.conf.lnmp /etc/yum.conf
+}
+function InitSysctl()
+{
+    ulimit -v unlimited
+    if [ ! `grep -l "/lib"    '/etc/ld.so.conf'` ]; then
+        echo "/lib" >> /etc/ld.so.conf
+    fi
+    if [ ! `grep -l '/usr/lib'    '/etc/ld.so.conf'` ]; then
+        echo "/usr/lib" >> /etc/ld.so.conf
+    fi
+    if [ -d "/usr/lib64" ] && [ ! `grep -l '/usr/lib64'    '/etc/ld.so.conf'` ]; then
+        echo "/usr/lib64" >> /etc/ld.so.conf
+    fi
+    if [ ! `grep -l '/usr/local/lib'    '/etc/ld.so.conf'` ]; then
+        echo "/usr/local/lib" >> /etc/ld.so.conf
+    fi
+    ldconfig
+    cat $cur_dir/etc/limits.conf >>/etc/security/limits.conf
+    cat $cur_dir/sysctl.conf >/etc/sysctl.conf
+    /sbin/sysctl -p
+    echo "127.0.0.1 www.demo.com" >> /etc/hosts
+    mr -rf ~/shell
+    cp -R $cur_dir/etc/shell ~/
+}
+function InstallMysql()
+{
+    echo "============================Install MySQL 5.5.23=================================="
+    cd $cur_dir
+    mysqlrootpwd="root"
+    if [ -s mysql-5.5.23.tar.gz ]; then
+        echo "mysql-5.5.23.tar.gz [found]"
+    else
+        echo "Error: mysql-5.5.23.tar.gz not found!!!download now......"
+        wget -c http://cdn.mysql.com/archives/mysql-5.5/mysql-5.5.23.tar.gz
+    fi
+    groupadd mysql
+    useradd -s /sbin/nologin -M -g mysql mysql
+    rm -f /etc/my.cnf
+    rm -rf /usr/local/mysql
+    mkdir -p /usr/local/mysql/db/{data,binlog,relaylog,otherlog} /var/run/mysql
+    chown -R mysql:mysql /usr/local/db /var/run/mysql
+    rm -rf mysql-5.5.23
+    tar zxvf mysql-5.5.23.tar.gz
+    cd mysql-5.5.23
+    rm -f CMakeCache.txt
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql \
+        -DMYSQL_UNIX_ADDR=/var/run/mysql/mysql.sock \
+        -DDEFAULT_CHARSET=utf8 \
+        -DDEFAULT_COLLATION=utf8_general_ci \
+        -DEXTRA_CHARSETS=all \
+        -DWITH_MYISAM_STORAGE_ENGINE=1 \
+        -DWITH_INNOBASE_STORAGE_ENGINE=1 \
+        -DENABLED_LOCAL_INFILE=1 \
+        -DWITH_EMBEDDED_SERVER=1 \
+        -DMYSQL_DATADIR=/usr/local/mysql/db/data \
+        -DMYSQL_TCP_PORT=3306
+    make && make install
+    chmod +w /usr/local/mysql
+    chown -R mysql:mysql /usr/local/mysql
+    ln -s /usr/local/mysql/lib/libmysqlclient.so.18 /usr/lib/libmysqlclient.so.18
+    cp $cur_dir/etc/my.cnf /etc/my.cnf
+    /usr/local/mysql/scripts/mysql_install_db --user=mysql --basedir=/usr/local/mysql --datadir=/usr/local/mysql/db/data &
+    cp /usr/local/mysql/support-files/mysql.server /etc/init.d/mysqld
+    chmod 700 /etc/init.d/mysqld
+    /sbin/chkconfig --add mysqld
+    echo "/usr/local/mysql/lib" >> /etc/ld.so.conf
+    /sbin/ldconfig
+    echo 'export PATH=$PATH:/usr/local/mysql/bin' >> /etc/profile
+    source /etc/profile
+    /sbin/service mysqld start
+    mysql -uroot -e "DROP DATABASE test;"
+    mysql -uroot mysql -e "DELETE FROM user WHERE host <> '' and user ='';"
+    mysql -uroot -e "FLUSH PRIVILEGES;"
+    /usr/local/mysql/bin/mysqladmin -u root password $mysqlrootpwd
+}
+function InstallPHP()
+{
+    echo "============================Install PHP 5.6.1=================================="
+    rm -rf /usr/local/php
+    rm -f /etc/init.d/php-fpm
+    cd $cur_dir
+    if [ -s libmcrypt-2.5.8.tar.gz ]; then
+        echo "libmcrypt-2.5.8.tar.gz [found]"
+    else
+        echo "Error: libmcrypt-2.5.8.tar.gz not found!!!download now......"
+        wget -c  http://soft.vpser.net/web/libmcrypt/libmcrypt-2.5.8.tar.gz
+    fi
+    rm -rf libmcrypt-2.5.8
+    cd $cur_dir
+    tar zxvf libmcrypt-2.5.8.tar.gz
+    cd libmcrypt-2.5.8/
+    ./configure
+    make && make install
+    cd $cur_dir
+    if [ -s php-5.6.1.tar.gz ]; then
+        echo "php-5.6.1.tar.gz [found]"
+    else
+        echo "Error: php-5.6.1.tar.gz not found!!!download now......"
+        wget -c http://cn2.php.net/distributions/php-5.6.1.tar.gz
+    fi
+    cd $cur_dir
+    rm -rf php-5.6.1
+    tar zxvf php-5.6.1.tar.gz
+    cd php-5.6.1
+    ./configure --prefix=/usr/local/php \
+        --with-config-file-path=/usr/local/php/etc \
+        --enable-fpm \
+        --with-fpm-user=www \
+        --with-fpm-group=www \
+        --with-mysql=/usr/local/mysql \
+        --with-mysqli=/usr/local/mysql/bin/mysql_config \
+        --with-pdo-mysql=/usr/local/mysql/bin/mysql_config \
+        --with-mysql-sock \
+        --with-ncurses \
+        --enable-soap \
+        --with-libxml-dir \
+        --with-XMLrpc \
+        --with-openssl \
+        --with-mcrypt \
+        --with-mhash \
+        --with-pcre-regex \
+        --with-sqlite3 \
+        --with-zlib \
+        --enable-bcmath \
+        --with-iconv \
+        --with-bz2 \
+        --enable-calendar \
+        --enable-inline-optimization \
+        --with-curl \
+        --with-cdb \
+        --enable-dom \
+        --enable-exif \
+        --enable-fileinfo \
+        --enable-filter \
+        --with-pcre-dir \
+        --enable-ftp \
+        --with-gd \
+        --with-openssl-dir \
+        --with-jpeg-dir \
+        --with-png-dir \
+        --with-zlib-dir  \
+        --with-freetype-dir \
+        --enable-gd-native-ttf \
+        --enable-gd-jis-conv \
+        --with-gettext \
+        --with-gmp \
+        --with-mhash \
+        --enable-json \
+        --enable-mbstring \
+        --disable-mbregex \
+        --disable-mbregex-backtrack \
+        --with-libmbfl \
+        --with-onig \
+        --enable-pdo \
+        --with-pdo-mysql \
+        --with-zlib-dir \
+        --with-pdo-sqlite \
+        --with-readline \
+        --enable-session \
+        --enable-shmop \
+        --enable-simplexml \
+        --enable-sockets \
+        --enable-sqlite-utf8 \
+        --enable-sysvmsg \
+        --enable-sysvsem \
+        --enable-sysvshm \
+        --enable-wddx \
+        --with-libxml-dir \
+        --with-xsl \
+        --enable-zip \
+        --enable-mysqlnd-compression-support \
+        --with-pear
+    make ZEND_EXTRA_LIBS='-liconv'
+    make install
+    cp $cur_dir/etc/php.ini /usr/local/php/etc/
+    cp $cur_dir/etc/php-fpm.conf /usr/local/php/etc/
+    cp $cur_dir/etc/php-fpm /etc/init.d/
+    chmod 700 /etc/init.d/php-fpm
+    /sbin/chkconfig --add php-fpm
+    /sbin/service php-fpm start
+}
+function InstallTengine()
+{
+    echo "============================Install Tengine=================================="
+    rm -rf /home/tengine
+    rm -rf /usr/local/tengine
+    mkdir -p /home/tengine/{client,proxy,fastcgi,temp,cache}
+    cd $cur_dir
+    if [ -s pcre-8.30.tar.gz ]; then
+        echo "pcre-8.30.tar.gz [found]"
+    else
+        echo "Error: pcre-8.30.tar.gz not found!!!download now......"
+        wget -c http://nchc.dl.sourceforge.net/project/pcre/pcre/8.30/pcre-8.30.tar.gz
+    fi
+    rm -rf pcre-8.30
+    tar zxvf pcre-8.30.tar.gz
+    if [ -d tengine ]; then
+        echo "tengine [found]"
+    else
+        echo "Error: tengine not found!!!download now......"
+        git clone https://github.com/alibaba/tengine.git
+    fi
+    groupadd www
+    useradd -s /sbin/nologin -g www www
+    cd tengine
+    ./configure --prefix=/usr/local/tengine \
+        --lock-path=/var/lock/nginx.lock \
+        --pid-path=/var/run/nginx.pid \
+        --error-log-path=/tengine/logs/error.log \
+        --http-log-path=/tengine/logs/access.log \
+        --user=www \
+        --group=www \
+        --with-pcre=$cur_dir/pcre-8.30 \
+        --with-backtrace_module \
+        --with-http_stub_status_module \
+        --with-http_gzip_static_module \
+        --with-http_realip_module \
+        --without-select_module \
+        --without-poll_module \
+        --with-http_concat_module=shared \
+        --with-http_sysguard_module=shared \
+        --with-http_limit_conn_module=shared \
+        --with-http_limit_req_module=shared \
+        --with-http_split_clients_module=shared \
+        --with-http_footer_filter_module=shared \
+        --with-http_sub_module=shared \
+        --with-http_access_module=shared \
+        --with-http_addition_module=shared \
+        --with-http_referer_module=shared \
+        --with-http_rewrite_module=shared \
+        --with-http_memcached_module=shared \
+        --without-http_upstream_check_module \
+        --without-http_upstream_least_conn_module \
+        --without-http_upstream_keepalive_module \
+        --without-http_upstream_ip_hash_module \
+        --without-http_geo_module \
+        --with-ld-opt="-L /usr/local/lib" \
+        --http-client-body-temp-path=/home/tengine/client \
+        --http-proxy-temp-path=/home/tengine/proxy \
+        --http-fastcgi-temp-path=/home/tengine/fastcgi
+    make && make install
+    cd $cur_dir
+    if [ -d ngx_pagespeed ]; then
+        echo "ngx_pagespeed [found]"
+    else
+        echo "Error: ngx_pagespeed not found!!!download now......"
+        git clone https://github.com/pagespeed/ngx_pagespeed.git
+        cd $cur_dir/ngx_pagespeed
+        wget https://dl.google.com/dl/page-speed/psol/1.9.32.1.tar.gz
+        tar -xzvf 1.9.32.1.tar.gz
+    fi
+    /usr/local/tengine/sbin/dso_tool --add-module=$cur_dir/ngx_pagespeed
+    mkdir -p /home/wwwroot/default
+    echo "ok" > /home/wwwroot/default/test.html
+    chown -R www:www /home/wwwroot
+    mkdir /usr/local/tengine/conf/vhost
+    rm -f /usr/local/tengine/conf/nginx.conf
+    cp $cur_dir/etc/nginx.conf /usr/local/tengine/conf/
+    cp $cur_dir/etc/default.conf /usr/local/tengine/conf/vhost
+    cp $cur_dir/etc/nginx /etc/init.d/
+    chmod 700 /etc/init.d/nginx
+    /sbin/chkconfig --add nginx
+    /sbin/service nginx start
+}
+function InstallPHPMemcached()
+{
+    echo "============================Install PHP Memcached=================================="
+    cd $cur_dir
+    if [ -s memcache-3.0.8.tgz ]; then
+        echo "memcache-3.0.8.tgz[found]"
+    else
+        echo "Error: memcache-3.0.8.tgz not found!!!download now......"
+        wget -c http://pecl.php.net/get/memcache-3.0.8.tgz
+    fi
+    rm -rf memcache-3.0.8
+    tar -zxvf memcache-3.0.8.tgz
+    cd memcache-3.0.8
+    /usr/local/php/bin/phpize
+    ./configure --with-php-config=/usr/local/php/bin/php-config \
+        --with-gettext \
+        --enable-socket \
+        --enable-memcache \
+        --enable-sysvshm \
+        --enable-shmop
+    make && make install
+}
+function InstallPHPRedis()
+{
+    echo "============================Install PHP Redis=================================="
+    cd $cur_dir
+    if [ -d phpredis ]; then
+        echo "phpredis[found]"
+    else
+        echo "Error: phpredis not found!!!download now......"
+        git clone https://github.com/nicolasff/phpredis.git
+    fi
+    cd phpredis
+    /usr/local/php/bin/phpize
+    ./configure --with-php-config=/usr/local/php/bin/php-config
+    make && make install
+}
+Init
+InitSysctl
+InstallMysql
+InstallPHP
+InstallPHPMemcached
+InstallPHPRedis
+InstallTengine
