@@ -306,6 +306,7 @@ function InstallTengine()
     chown -R www:www /home/wwwroot
     mkdir /usr/local/tengine/conf/vhost
     mkdir /usr/local/tengine/logs
+    mkdir /usr/local/tengine/conf/htaccess
     chown -R www:www /usr/local/tengine/logs
     rm -f /usr/local/tengine/conf/nginx.conf
     cp $cur_dir/etc/nginx.conf /usr/local/tengine/conf/
