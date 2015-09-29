@@ -88,8 +88,8 @@ function InstallMysql()
     useradd -s /sbin/nologin -M -g mysql mysql
     rm -f /etc/my.cnf
     rm -rf /usr/local/mysql
-    mkdir -p /usr/local/mysql/db/{data,binlog,relaylog,otherlog} /var/run/mysql
-    chown -R mysql:mysql /usr/local/db /var/run/mysql
+    mkdir -p /usr/local/mysql/db/{data,binlog,relaylog,otherlog,innodb} /var/run/mysql
+    chown -R mysql:mysql /usr/local/mysql/db /var/run/mysql
     rm -rf mysql-5.5.23
     tar zxvf mysql-5.5.23.tar.gz
     cd mysql-5.5.23
